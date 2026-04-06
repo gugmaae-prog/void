@@ -118,7 +118,7 @@
       inset: -25%;
       background-repeat: repeat;
       background-size: 540px 540px;
-      opacity: 0.9;
+      opacity: calc(0.75 + (var(--star-density, 1) - 1) * 0.35);
       transform-origin: center;
       will-change: transform, opacity;
     }
@@ -947,8 +947,8 @@
 
         const AETHER_CONFIG = {
             ...EMBEDDED_TEST_KEYS,
-            supabaseUrl: window.AETHER_SUPABASE_URL || EMBEDDED_TEST_KEYS.supabaseUrl,
-            supabaseAnonKey: window.AETHER_SUPABASE_ANON_KEY || EMBEDDED_TEST_KEYS.supabaseAnonKey,
+            supabaseUrl: window.AETHER_SUPABASE_URL || window.NEXT_PUBLIC_SUPABASE_URL || window.VERCEL_SUPABASE_URL || EMBEDDED_TEST_KEYS.supabaseUrl,
+            supabaseAnonKey: window.AETHER_SUPABASE_ANON_KEY || window.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || window.NEXT_PUBLIC_SUPABASE_ANON_KEY || window.VERCEL_SUPABASE_PUBLISHABLE_KEY || EMBEDDED_TEST_KEYS.supabaseAnonKey,
             aiProvider: window.AETHER_AI_PROVIDER || EMBEDDED_TEST_KEYS.aiProvider,
             geminiApiKey: window.GEMINI_API_KEY || EMBEDDED_TEST_KEYS.geminiApiKey,
             groqApiKey: window.GROQ_API_KEY || EMBEDDED_TEST_KEYS.groqApiKey,
@@ -1085,6 +1085,14 @@
 
         function inferStateFromPrompt(text) {
             const value = text.toLowerCase();
+            const learned = learnedShapeMap[value];
+            if (learned && shapes[learned]) {
+                return { element: learned === 'fish' ? 'water' : 'neutral', color: 0xf6f1d3, shape: learned, emotion: 'remembering' };
+            }
+            if (/solar|planet|orbit|system|sun|moon/.test(value)) return { element: 'neutral', color: 0xffe2a6, shape: 'solar', emotion: 'orbital' };
+            if (/human|person|body|dance|dancer/.test(value)) return { element: 'neutral', color: 0xf0f0ff, shape: 'humanoid', emotion: 'alive' };
+            if (/animal|wolf|bird|cat|lion|tiger/.test(value)) return { element: 'neutral', color: 0xffd8b0, shape: 'animal', emotion: 'wild' };
+            if (/fish|ocean life|whale|dolphin/.test(value)) return { element: 'water', color: 0x8ad9ff, shape: 'fish', emotion: 'aquatic' };
             if (/water|ocean|wave|fluid|river|rain/.test(value)) return { element: 'water', color: 0x7fc7ff, shape: 'liquid', emotion: 'fluid' };
             if (/glass|orb|pearl|bubble|crystal/.test(value)) return { element: 'liquid', color: 0xe8f6ff, shape: 'orb', emotion: 'lucent' };
             if (/fire|burn|rage|ember|sun/.test(value)) return { element: 'fire', color: 0xffb15c, shape: 'vortex', emotion: 'volatile' };
@@ -1213,6 +1221,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             container.appendChild(renderer.domElement);
+            document.documentElement.style.setProperty('--star-density', String(STAR_OVERLAY_DENSITY));
 
             shapes.chaos  = generateChaos(PARTICLE_COUNT, 22);
             shapes.stars  = generateStarfield(PARTICLE_COUNT, 78);
@@ -1385,6 +1394,7 @@
                     input.value = extracted.slice(0, 4000);
                     updateComposerState();
                     input.focus();
+                    pulseHaptics([14, 26, 18, 26, 34]);
                 } catch (error) {
                     console.warn('[Aether] attach failed', error);
                     addVaultEntry('reflection', 'The void could not read that file.');
