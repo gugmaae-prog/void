@@ -1,0 +1,13 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/main"
+    },
+    {
+      "source": "/main",
+      "destination": "/main"
+    }
+  ]
+}

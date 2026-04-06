@@ -1,0 +1,7 @@
+name = "void"
+main = "worker.js"
+compatibility_date = "2024-04-01"
+
+[site]
+bucket = "."
+include = ["main", "vercel.json", "README.md", "aether_single_deploy_uploads_blackhole_masked_allkeys_v2 (1).html"]
