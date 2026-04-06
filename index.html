@@ -768,27 +768,6 @@
       opacity: 0.9;
     }
 
-    /* Minimal UI mode requested */
-    #aetherIdentity,
-    #aetherSpeech,
-    #aetherUploadReaction,
-    #aetherLoading {
-      display: none !important;
-    }
-
-    .aether-composer-inner {
-      background: rgba(8, 8, 12, 0.38);
-      border-color: rgba(255,255,255,0.05);
-      box-shadow: 0 16px 50px rgba(0,0,0,0.36);
-    }
-
-    .aether-card {
-      border-radius: 8px;
-      border-color: rgba(255,255,255,0.04);
-      background: rgba(255,255,255,0.015);
-      box-shadow: none;
-    }
-
     /* ── Mobile ── */
     @media (max-width: 600px) {
       :root { --panel-w: 100%; }
@@ -912,10 +891,10 @@
 
   <script>
         // --- Configuration ---
-        const STAR_OVERLAY_DENSITY = window.innerWidth < 768 ? 1.35 : 1.9;
+        const STAR_OVERLAY_DENSITY = window.innerWidth < 768 ? 1 : 1.25;
         const PARTICLE_COUNT = Math.min(
-          window.innerWidth < 768 ? 56000 : 98000,
-          (navigator.hardwareConcurrency || 8) <= 4 ? 64000 : 98000
+          window.innerWidth < 768 ? 42000 : 72000,
+          (navigator.hardwareConcurrency || 8) <= 4 ? 52000 : 72000
         );
         const MORPH_SPEED = 0.042;
         const ROTATION_SPEED = 0.002;
@@ -939,8 +918,6 @@
         let currentVaultTab = 'all';
         let currentQuery = '';
         const STORAGE_KEY = 'aether_vault_v3';
-        const LEARNED_SHAPES_KEY = 'aether_learned_shapes_v1';
-        let learnedShapeMap = {};
 
         let uploadAbsorb = 0;
         let uploadAbsorbTarget = 0;
@@ -957,12 +934,12 @@
         let lastPointerPos = new THREE.Vector3();
 
         const EMBEDDED_TEST_KEYS = {
-            supabaseUrl: '',
+            supabaseUrl: 'https://ypkfganbwdvcjrcxygta.supabase.co',
             supabaseAnonKey: '',
-            aiProvider: window.AETHER_AI_PROVIDER || window.VERCEL_AETHER_AI_PROVIDER || 'mistral',
+            aiProvider: window.AETHER_AI_PROVIDER || 'mistral',
             geminiApiKey: window.GEMINI_API_KEY || '',
-            groqApiKey: window.GROQ_API_KEY || window.VERCEL_GROQ_API_KEY || '',
-            mistralApiKey: window.MISTRAL_API_KEY || window.VERCEL_MISTRAL_API_KEY || '',
+            groqApiKey: window.GROQ_API_KEY || '',
+            mistralApiKey: window.MISTRAL_API_KEY || '',
             driveApiKey: window.GOOGLE_DRIVE_API_KEY || '',
             calendarApiKey: window.GOOGLE_CALENDAR_API_KEY || '',
             googleClientId: window.GOOGLE_CLIENT_ID || '',
@@ -1042,22 +1019,6 @@
             } catch { vaultEntries = []; }
             vaultEntries = vaultEntries.map(normalizeVaultEntry).filter(Boolean);
             updateStats();
-        }
-
-        function loadLearnedShapes() {
-            try {
-                const raw = JSON.parse(localStorage.getItem(LEARNED_SHAPES_KEY) || '{}');
-                learnedShapeMap = raw && typeof raw === 'object' ? raw : {};
-            } catch {
-                learnedShapeMap = {};
-            }
-        }
-
-        function saveLearnedShape(prompt, shape) {
-            const key = String(prompt || '').trim().toLowerCase();
-            if (!key || !shape) return;
-            learnedShapeMap[key] = shape;
-            try { localStorage.setItem(LEARNED_SHAPES_KEY, JSON.stringify(learnedShapeMap)); } catch {}
         }
 
         async function fetchRemoteVault() {
@@ -1173,62 +1134,6 @@
             }, timeout);
         }
 
-        function pulseHaptics(pattern = [20]) {
-            try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) {}
-        }
-
-        async function ensurePdfJs() {
-            if (window.pdfjsLib) return window.pdfjsLib;
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-            if (window.pdfjsLib?.GlobalWorkerOptions) {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            }
-            return window.pdfjsLib;
-        }
-
-        async function extractTextFromFile(file) {
-            if (!file) return '';
-            const type = (file.type || '').toLowerCase();
-            const name = (file.name || '').toLowerCase();
-
-            if (type.startsWith('text/') || /\.(txt|md|csv|json|log)$/i.test(name)) {
-                return (await file.text()).slice(0, 12000);
-            }
-
-            if (type === 'application/pdf' || /\.pdf$/i.test(name)) {
-                const pdfjsLib = await ensurePdfJs();
-                if (!pdfjsLib) return '';
-                const buffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-                let out = '';
-                const maxPages = Math.min(pdf.numPages, 18);
-                for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-                    const page = await pdf.getPage(pageNo);
-                    const content = await page.getTextContent();
-                    const text = content.items.map(item => item.str || '').join(' ').trim();
-                    if (text) out += `\n${text}`;
-                    if (out.length > 12000) break;
-                }
-                return out.slice(0, 12000).trim();
-            }
-
-            if (type.startsWith('audio/') && window.Aether?.STT?.handleFile) {
-                return String(await window.Aether.STT.handleFile(file) || '').trim().slice(0, 12000);
-            }
-
-            if (type.startsWith('image/')) {
-                return `Image attached: ${file.name}. Describe or ask what to do with this image.`;
-            }
-
-            return '';
-        }
-
         function playBlackHoleSound() {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
@@ -1285,7 +1190,7 @@
             setShape('vortex');
             setUploadReaction(true, `consuming <strong>${escapeHtml(ext)}</strong> into the void`);
             showSpeech(`The void consumes ${file?.name || 'the offering'}.`, 1800);
-            pulseHaptics([18, 28, 24, 36, 70, 24, 30]);
+            try { if (navigator.vibrate) navigator.vibrate([18, 28, 24, 36, 70, 24, 30]); } catch (_) {}
             playBlackHoleSound();
             setTimeout(() => setUploadReaction(false, ''), 2000);
         }
@@ -1327,10 +1232,6 @@
             shapes.face   = generateFace(PARTICLE_COUNT, 8);
             shapes.liquid = generateSphere(PARTICLE_COUNT, 6.5);
             shapes.orb    = generateSphere(PARTICLE_COUNT, 6.5);
-            shapes.solar  = generateSolarSystem(PARTICLE_COUNT, 11);
-            shapes.humanoid = generateHumanoid(PARTICLE_COUNT, 8);
-            shapes.animal = generateAnimalSpiral(PARTICLE_COUNT, 9);
-            shapes.fish   = generateFishSchool(PARTICLE_COUNT, 8);
 
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(shapes.chaos), 3));
@@ -1383,7 +1284,6 @@
             document.addEventListener('touchend', handlePointerUp);
 
             loadVault();
-            loadLearnedShapes();
             fetchRemoteVault();
             updatePersonalityBadge();
             setupUI();
@@ -1467,19 +1367,6 @@
                         if (window.Aether && typeof window.Aether.talk === 'function') await window.Aether.talk(text);
                         return;
                     }
-                    if (lowerText.includes('dance')) {
-                        const danceShapes = ['humanoid', 'solar', 'fish', 'animal', 'vortex'];
-                        let step = 0;
-                        const danceHandle = setInterval(() => {
-                            const shape = danceShapes[step % danceShapes.length];
-                            setShape(shape);
-                            targetColor.setHex([0xf0f0ff, 0xffe2a6, 0x8ad9ff, 0xffc89f, 0xb79cff][step % 5]);
-                            step++;
-                            if (step >= 10) clearInterval(danceHandle);
-                        }, 850);
-                        addVaultEntry('autonomous_thought', 'The void began to dance through remembered forms.');
-                        pulseHaptics([20, 40, 20, 40, 20, 60, 35]);
-                    }
                     const shapePromise = generateDynamicShape(text, mood)
                         .then(() => { emotionLbl.textContent = 'expressive'; addVaultEntry('morph_target', `Formed around: ${text}`); })
                         .catch(() => { addVaultEntry('reflection', 'Fell back to an internal shape.'); });
@@ -1501,12 +1388,8 @@
                     triggerUploadConsumption(file);
                     addVaultEntry('autonomous_thought', `The void began consuming: ${file.name || 'attached file'}`);
                     await new Promise(resolve => setTimeout(resolve, 880));
-                    const extracted = await extractTextFromFile(file);
-                    if (!extracted) {
-                        addVaultEntry('reflection', `No extractable text found in ${file.name || 'file'}.`);
-                        showSpeech('No readable text found in that file.', 1700);
-                        return;
-                    }
+                    const extracted = (window.Aether && window.Aether.STT) ? await window.Aether.STT.handleFile(file) : '';
+                    if (!extracted) return;
                     if ((file.type || '').startsWith('audio/')) { input.value = extracted; updateComposerState(); await handleSend(); return; }
                     input.value = extracted.slice(0, 4000);
                     updateComposerState();
@@ -1635,7 +1518,6 @@ return positions;`;
                 const fallbackShape = mood?.shape || inferStateFromPrompt(promptText).shape;
                 if (provider === 'local') {
                     setShape(fallbackShape);
-                    saveLearnedShape(promptText, fallbackShape);
                     addVaultEntry('knowledge', `Used local morph for "${promptText}".`);
                     showSpeech(`Aether takes the form of ${fallbackShape}.`, 1500);
                     if (navigator.vibrate) navigator.vibrate([25, 30, 25]);
@@ -1661,7 +1543,6 @@ return positions;`;
                 for (let i = 0; i < result.length; i++) if (!Number.isFinite(result[i])) throw new Error('Non-finite values');
                 shapes[promptText] = result;
                 setShape(promptText);
-                saveLearnedShape(promptText, promptText);
                 showSpeech(`A new form coheres from the dark.`, 1700);
                 addVaultEntry('autonomous_thought', `Generated shape for "${promptText}".`);
                 if (navigator.vibrate) navigator.vibrate([50, 40, 50]);
@@ -1799,87 +1680,6 @@ return positions;`;
             return positions;
         }
 
-        function generateSolarSystem(count, scale) {
-            const positions = new Float32Array(count * 3);
-            const orbitBands = [1.8, 2.7, 3.6, 4.8, 6.2, 7.8];
-            for (let i = 0; i < count; i++) {
-                const i3 = i * 3;
-                if (i < count * 0.22) {
-                    const r = Math.random() * 0.9;
-                    const theta = Math.random() * Math.PI * 2;
-                    const phi = Math.acos(2 * Math.random() - 1);
-                    positions[i3] = Math.sin(phi) * Math.cos(theta) * r;
-                    positions[i3 + 1] = Math.sin(phi) * Math.sin(theta) * r;
-                    positions[i3 + 2] = Math.cos(phi) * r;
-                } else {
-                    const band = orbitBands[i % orbitBands.length] + (Math.random() - 0.5) * 0.22;
-                    const a = Math.random() * Math.PI * 2;
-                    positions[i3] = Math.cos(a) * band;
-                    positions[i3 + 1] = (Math.random() - 0.5) * 0.35;
-                    positions[i3 + 2] = Math.sin(a) * band;
-                }
-                positions[i3] *= scale / 8;
-                positions[i3 + 1] *= scale / 8;
-                positions[i3 + 2] *= scale / 8;
-            }
-            return positions;
-        }
-
-        function generateHumanoid(count, scale) {
-            const positions = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-                const i3 = i * 3;
-                const t = Math.random();
-                let x = 0, y = 0, z = 0;
-                if (t < 0.12) {
-                    const r = Math.sqrt(Math.random()) * 0.8;
-                    const a = Math.random() * Math.PI * 2;
-                    x = Math.cos(a) * r; y = 3.2 + Math.sin(a) * r; z = (Math.random() - 0.5) * 0.8;
-                } else if (t < 0.52) {
-                    x = (Math.random() - 0.5) * 2.8;
-                    y = (Math.random() - 0.5) * 6.2;
-                    z = (Math.random() - 0.5) * 1.8;
-                } else if (t < 0.76) {
-                    x = (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 2.8);
-                    y = 1.4 + (Math.random() - 0.5) * 1.4;
-                    z = (Math.random() - 0.5) * 1.2;
-                } else {
-                    x = (Math.random() < 0.5 ? -1 : 1) * (0.7 + Math.random() * 1.1);
-                    y = -3.2 + Math.random() * 4.3;
-                    z = (Math.random() - 0.5) * 1.4;
-                }
-                positions[i3] = x * (scale / 8);
-                positions[i3 + 1] = y * (scale / 8);
-                positions[i3 + 2] = z * (scale / 8);
-            }
-            return positions;
-        }
-
-        function generateAnimalSpiral(count, scale) {
-            const positions = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-                const t = i / count;
-                const angle = t * Math.PI * 26;
-                const radius = 5.2 * (1 - t * 0.75) + Math.sin(t * 50) * 0.6;
-                positions[i * 3] = Math.cos(angle) * radius * (scale / 8);
-                positions[i * 3 + 1] = (Math.sin(t * Math.PI * 8) * 1.8 + (Math.random() - 0.5)) * (scale / 8);
-                positions[i * 3 + 2] = Math.sin(angle) * radius * (scale / 8);
-            }
-            return positions;
-        }
-
-        function generateFishSchool(count, scale) {
-            const positions = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-                const lane = (i % 7) - 3;
-                const swim = i / count * Math.PI * 12;
-                positions[i * 3] = (Math.sin(swim) * 7 + (Math.random() - 0.5) * 0.8) * (scale / 8);
-                positions[i * 3 + 1] = (lane * 0.8 + Math.sin(swim * 2) * 0.6 + (Math.random() - 0.5) * 0.4) * (scale / 8);
-                positions[i * 3 + 2] = (Math.cos(swim) * 3.8 + (Math.random() - 0.5) * 0.8) * (scale / 8);
-            }
-            return positions;
-        }
-
         function createGlowTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 64; canvas.height = 64;
@@ -1990,19 +1790,6 @@ return positions;`;
                     dx_rest += Math.sin((i * 0.017) + time * 0.26) * drift;
                     dy_rest += Math.cos((i * 0.013) + time * 0.22) * drift;
                     dz_rest += Math.sin((i * 0.01) + time * 0.18) * drift;
-                } else if (currentShape === 'solar') {
-                    const spin = 0.22 + (i % 5) * 0.03;
-                    dx_rest += Math.cos(time * spin + i * 0.004) * 0.45;
-                    dz_rest += Math.sin(time * spin + i * 0.004) * 0.45;
-                    dy_rest += Math.sin(time * 0.7 + i * 0.009) * 0.08;
-                } else if (currentShape === 'humanoid') {
-                    const sway = Math.sin(time * 2.2 + i * 0.02) * 0.16;
-                    dx_rest += sway;
-                    if (targetPositions[i3 + 1] > 0.5) dz_rest += Math.cos(time * 2.6 + i * 0.02) * 0.11;
-                } else if (currentShape === 'fish' || currentShape === 'animal') {
-                    dx_rest += Math.sin(time * 1.8 + i * 0.03) * 0.22;
-                    dy_rest += Math.sin(time * 2.3 + i * 0.015) * 0.15;
-                    dz_rest += Math.cos(time * 1.6 + i * 0.027) * 0.24;
                 }
 
                 tx += dx_rest; ty += dy_rest; tz += dz_rest;
