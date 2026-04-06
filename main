@@ -1795,6 +1795,12 @@ window.addEventListener('load', async function () {
             try {
                 vaultEntries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
                 if (!Array.isArray(vaultEntries)) vaultEntries = [];
+                vaultEntries = vaultEntries.map(entry => {
+                    const clone = { ...entry };
+                    if (typeof clone.source_url === 'string' && clone.source_url.startsWith('blob:')) delete clone.source_url;
+                    if (typeof clone.download_url === 'string' && clone.download_url.startsWith('blob:')) delete clone.download_url;
+                    return clone;
+                });
             } catch {
                 vaultEntries = [];
             }
@@ -1802,7 +1808,13 @@ window.addEventListener('load', async function () {
 
         function saveVault() {
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(vaultEntries.slice(0, 120)));
+                const persisted = vaultEntries.slice(0, 120).map(entry => {
+                    const clone = { ...entry };
+                    if (typeof clone.source_url === 'string' && clone.source_url.startsWith('blob:')) delete clone.source_url;
+                    if (typeof clone.download_url === 'string' && clone.download_url.startsWith('blob:')) delete clone.download_url;
+                    return clone;
+                });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
             } catch {}
         }
 
