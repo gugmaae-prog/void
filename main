@@ -441,6 +441,22 @@ window.AETHER_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi
         .aether-chip.type-morph_target { background:rgba(100,220,220,0.10); color:rgba(120,220,220,0.8); }
         .aether-time { font-size:5.5px; color:rgba(255,255,255,0.10); margin-left:auto; }
         .aether-card-text { font-size:10px; letter-spacing:0.4px; line-height:1.75; color:rgba(255,255,255,0.70); }
+        .aether-card-link {
+          display: inline-flex;
+          margin-top: 8px;
+          margin-right: 10px;
+          font-size: 9px;
+          letter-spacing: 1.2px;
+          text-transform: uppercase;
+          color: rgba(186, 160, 255, 0.92);
+          text-decoration: none;
+          border-bottom: 1px solid rgba(186, 160, 255, 0.35);
+          padding-bottom: 1px;
+        }
+        .aether-card-link:hover {
+          color: rgba(219, 205, 255, 0.98);
+          border-bottom-color: rgba(219, 205, 255, 0.72);
+        }
     </style>
 <!-- Load Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1681,7 +1697,24 @@ window.addEventListener('load', async function () {
 });
 </script><script>
         // --- Configuration ---
-        const PARTICLE_COUNT = Math.min(window.innerWidth < 768 ? 28000 : 50000, (navigator.hardwareConcurrency || 8) <= 4 ? 32000 : 50000);
+        function detectQualityPreset() {
+            const cores = navigator.hardwareConcurrency || 4;
+            const memory = navigator.deviceMemory || 4;
+            const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const isMobile = window.innerWidth < 768;
+            const lowEnd = reducedMotion || cores <= 4 || memory <= 4;
+            const highEnd = !isMobile && cores >= 8 && memory >= 8 && !reducedMotion;
+            if (lowEnd) {
+                return { particles: isMobile ? 9000 : 14000, maxPixelRatio: 1.0, frameIntervalMs: 33 };
+            }
+            if (highEnd) {
+                return { particles: 36000, maxPixelRatio: 1.5, frameIntervalMs: 16 };
+            }
+            return { particles: isMobile ? 14000 : 24000, maxPixelRatio: 1.25, frameIntervalMs: 22 };
+        }
+
+        const QUALITY_PRESET = detectQualityPreset();
+        const PARTICLE_COUNT = QUALITY_PRESET.particles;
         const MORPH_SPEED = 0.04;
         const ROTATION_SPEED = 0.002;
 
@@ -1709,6 +1742,8 @@ window.addEventListener('load', async function () {
         let uploadAbsorbTarget = 0;
         let uploadAbsorbUntil = 0;
         let uploadSoundContext = null;
+        let frameIntervalMs = QUALITY_PRESET.frameIntervalMs;
+        let lastFrameTime = 0;
 
         // Interaction State for Singularity & Big Bang
         let pointerDown = false;
@@ -1771,13 +1806,14 @@ window.addEventListener('load', async function () {
             } catch {}
         }
 
-        function addVaultEntry(type, text) {
+        function addVaultEntry(type, text, meta = {}) {
             const entry = {
                 type,
                 text,
                 time: nowStamp(),
                 ts: Date.now(),
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                ...meta
             };
             vaultEntries.unshift(entry);
             saveVault();
@@ -1806,6 +1842,8 @@ window.addEventListener('load', async function () {
                   <span class="aether-time">${entry.time}</span>
                 </div>
                 <div class="aether-card-text">${escapeHtml(entry.text)}</div>
+                ${(entry.download_name && entry.download_url) ? `<a class="aether-card-link" href="${entry.download_url}" download="${escapeHtml(entry.download_name)}">download extracted text</a>` : ''}
+                ${(entry.source_name && entry.source_url) ? `<a class="aether-card-link" href="${entry.source_url}" download="${escapeHtml(entry.source_name)}">download original file</a>` : ''}
               </div>
             `).join('');
         }
@@ -1959,9 +1997,9 @@ window.addEventListener('load', async function () {
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
             camera.position.z = 15;
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Performance optimization
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY_PRESET.maxPixelRatio)); // Performance optimization
             container.appendChild(renderer.domElement);
 
             // 2. Generate Particle Shapes
@@ -2120,7 +2158,7 @@ window.addEventListener('load', async function () {
                         return;
                     }
 
-                    if (lowerText.includes('scatter') || lowerText.includes('star')) {
+                    if (/\b(scatter|star|stars|starfield)\b/.test(lowerText)) {
                         setShape('stars');
                         emotionLbl.textContent = 'expansive';
                         addVaultEntry('autonomous_thought', 'Responded by dispersing into a starfield.');
@@ -2163,6 +2201,17 @@ window.addEventListener('load', async function () {
                     const extracted = (window.Aether && window.Aether.STT)
                         ? await window.Aether.STT.handleFile(file)
                         : '';
+                    const sourceUrl = URL.createObjectURL(file);
+                    const textForMemory = String(extracted || '').trim();
+                    const textFileName = (file.name ? `${file.name}.txt` : 'aether-extract.txt').replace(/[\\/:*?"<>|]/g, '_');
+                    const extractedBlob = new Blob([textForMemory || `No extractable text from ${file.name || 'file'}.`], { type: 'text/plain;charset=utf-8' });
+                    const extractedUrl = URL.createObjectURL(extractedBlob);
+                    addVaultEntry('file', `Absorbed ${file.name || 'file'}`, {
+                        source_name: file.name || 'uploaded-file',
+                        source_url: sourceUrl,
+                        download_name: textFileName,
+                        download_url: extractedUrl
+                    });
                     if (!extracted) return;
                     if ((file.type || '').startsWith('audio/')) {
                         input.value = extracted;
@@ -2170,9 +2219,11 @@ window.addEventListener('load', async function () {
                         await handleSend();
                         return;
                     }
-                    input.value = extracted.slice(0, 4000);
+                    input.value = `Read the uploaded file "${file.name || 'this file'}" and help me with it:\n\n${extracted.slice(0, 5000)}`;
                     updateComposerState();
                     input.focus();
+                    speech.textContent = `Absorbed ${file.name || 'file'}. Press Send and I will read it.`;
+                    speech.classList.add('visible');
                 } catch (error) {
                     console.warn('[Aether] attach handling failed', error);
                     addVaultEntry('reflection', 'The void could not read that file.');
@@ -2647,7 +2698,7 @@ return positions;`;
         }
 
         // --- Animation Loop ---
-        function animate() {
+        function animate(now = performance.now()) {
             animationHandle = requestAnimationFrame(animate);
 
             if (isPaused || !particleSystem) {
@@ -2658,7 +2709,12 @@ return positions;`;
                 return;
             }
 
-            const time = Date.now() * 0.001;
+            if (now - lastFrameTime < frameIntervalMs) {
+                renderer.render(scene, camera);
+                return;
+            }
+            lastFrameTime = now;
+            const time = now * 0.001;
 
             if (Date.now() > uploadAbsorbUntil) {
                 uploadAbsorbTarget = 0;
