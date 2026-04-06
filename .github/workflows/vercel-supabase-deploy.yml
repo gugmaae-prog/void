@@ -44,10 +44,28 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel preview environment
-        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        run: |
+          for attempt in 1 2 3; do
+            vercel pull --yes --environment=preview --token="$VERCEL_TOKEN" && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Preview pull failed after 3 attempts."
+              exit 1
+            fi
+            echo "Preview pull failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Build preview artifacts
-        run: vercel build --token="$VERCEL_TOKEN"
+        run: |
+          for attempt in 1 2 3; do
+            vercel build --token="$VERCEL_TOKEN" && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Preview build failed after 3 attempts."
+              exit 1
+            fi
+            echo "Preview build failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
@@ -59,7 +77,16 @@ jobs:
 
       - name: Push Supabase migrations
         if: ${{ hashFiles('supabase/migrations/**') != '' }}
-        run: supabase db push
+        run: |
+          for attempt in 1 2 3; do
+            supabase db push && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Supabase preview migration push failed after 3 attempts."
+              exit 1
+            fi
+            echo "Supabase preview migration push failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Deploy preview to Vercel
         run: |
@@ -97,10 +124,28 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel production environment
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: |
+          for attempt in 1 2 3; do
+            vercel pull --yes --environment=production --token="$VERCEL_TOKEN" && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Production pull failed after 3 attempts."
+              exit 1
+            fi
+            echo "Production pull failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Build production artifacts
-        run: vercel build --prod --token="$VERCEL_TOKEN"
+        run: |
+          for attempt in 1 2 3; do
+            vercel build --prod --token="$VERCEL_TOKEN" && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Production build failed after 3 attempts."
+              exit 1
+            fi
+            echo "Production build failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
@@ -112,7 +157,16 @@ jobs:
 
       - name: Push Supabase migrations
         if: ${{ hashFiles('supabase/migrations/**') != '' }}
-        run: supabase db push
+        run: |
+          for attempt in 1 2 3; do
+            supabase db push && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Supabase production migration push failed after 3 attempts."
+              exit 1
+            fi
+            echo "Supabase production migration push failed (attempt $attempt). Retrying in 10s..."
+            sleep 10
+          done
 
       - name: Deploy production to Vercel
         run: |
